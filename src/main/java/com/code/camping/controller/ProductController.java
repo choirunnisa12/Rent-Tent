@@ -36,7 +36,7 @@ public class ProductController {
     public ResponseEntity<?> create(@RequestBody ProductRequest request, @RequestHeader(name = "Authorization") String access_token) {
         Claims jwtPayload = jwtUtils.decodeAccessToken(access_token);
         Date currentDate = new Date();
-        boolean isProductIdJWTequalsProductIdReqParams = jwtPayload.getSubject().equals(admin_service.get_by_id(jwtPayload.getSubject()).getId());
+        boolean isProductIdJWTequalsProductIdReqParams = jwtPayload.getSubject().equals(admin_service.getById(jwtPayload.getSubject()).getId());
         boolean isTokenNotYetExpired = currentDate.before(jwtPayload.getExpiration());
 
         if (isProductIdJWTequalsProductIdReqParams && isTokenNotYetExpired) {
@@ -85,7 +85,7 @@ public class ProductController {
     public ResponseEntity<?> update(@RequestHeader(name = "Authorization") String access_token, @RequestBody Product request) {
         Claims jwtPayload = jwtUtils.decodeAccessToken(access_token);
         Date currentDate = new Date();
-        boolean isProductIdJWTequalsProductIdReqParams = jwtPayload.getSubject().equals(admin_service.get_by_id(jwtPayload.getSubject()).getId());
+        boolean isProductIdJWTequalsProductIdReqParams = jwtPayload.getSubject().equals(admin_service.getById(jwtPayload.getSubject()).getId());
         boolean isTokenNotYetExpired = currentDate.before(jwtPayload.getExpiration());
 
         if (isProductIdJWTequalsProductIdReqParams && isTokenNotYetExpired) {
@@ -101,7 +101,7 @@ public class ProductController {
     public ResponseEntity<?> delete(@RequestHeader(name = "Authorization") String access_token, @PathVariable String id_product) {
         Claims jwtPayload = jwtUtils.decodeAccessToken(access_token);
         Date currentDate = new Date();
-        boolean isProductIdJWTequalsProductIdReqParams = jwtPayload.getSubject().equals(admin_service.get_by_id(jwtPayload.getSubject()).getId());
+        boolean isProductIdJWTequalsProductIdReqParams = jwtPayload.getSubject().equals(admin_service.getById(jwtPayload.getSubject()).getId());
         boolean isTokenNotYetExpired = currentDate.before(jwtPayload.getExpiration());
 
         if (isProductIdJWTequalsProductIdReqParams && isTokenNotYetExpired) {
