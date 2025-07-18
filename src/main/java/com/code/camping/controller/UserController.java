@@ -1,112 +1,103 @@
 package com.code.camping.controller;
 
 import com.code.camping.entity.User;
-import com.code.camping.security.JwtUtils;
-import com.code.camping.service.AdminService;
 import com.code.camping.service.UserService;
-import com.code.camping.utils.dto.request.LoginUserRequest;
 import com.code.camping.utils.dto.request.RegisterUserRequest;
-import com.code.camping.utils.dto.response.LoginUserResponse;
 import com.code.camping.utils.dto.response.UserResponse;
 import com.code.camping.utils.dto.webResponse.PageResponse;
-import com.code.camping.utils.dto.webResponse.Res;
-import io.jsonwebtoken.Claims;
+import com.code.camping.utils.dto.webResponse.WebResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
-@AllArgsConstructor
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/api/v1/users")
+@RequiredArgsConstructor
+@Slf4j
+@Tag(name = "User Management", description = "User management APIs")
 public class UserController {
 
-    private final AdminService adminService;
     private final UserService userService;
-    private final JwtUtils jwtUtils;
 
-    @PostMapping("/register")
-    public ResponseEntity<?> create(@Valid @RequestBody RegisterUserRequest request) {
-        UserResponse response = UserResponse.fromUser(userService.create(request));
-        return Res.renderJson(response, "Register User Created Successfully", HttpStatus.CREATED);
-    }
-
-    @PostMapping(path = "/login")
-    public LoginUserResponse login(@RequestBody LoginUserRequest request) {
-        return userService.login(request);
-    }
-
-    @GetMapping(path = "/{id}")
-    public ResponseEntity<?> getOne(@RequestHeader(name = "Authorization") String accessToken, @PathVariable String id) {
-        Claims jwtPayload = jwtUtils.decodeAccessToken(accessToken);
-        Date currentDate = new Date();
-        boolean isUserIdJWTequalsUserIdReqParams = jwtPayload.getSubject().equals(id);
-        boolean isTokenNotYetExpired = currentDate.before(jwtPayload.getExpiration());
-        if (isUserIdJWTequalsUserIdReqParams && isTokenNotYetExpired) {
-            return Res.renderJson(UserResponse.fromUser(userService.getById(id)), "User ID Retrieved Successfully", HttpStatus.OK);
-        } else {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Failed to Find");
-        }
+    @GetMapping("/{id}")
+    @Operation(summary = "Get user by ID", description = "Retrieve user information by ID")
+    @PreAuthorize("hasRole('USER') and #id == authentication.principal.username or hasRole('ADMIN')")
+    public ResponseEntity<WebResponse<UserResponse>> getUserById(
+            @Parameter(description = "User ID") @PathVariable String id) {
+        log.info("Fetching user with ID: {}", id);
+        UserResponse response = UserResponse.fromUser(userService.getById(id));
+        
+        return ResponseEntity.ok(WebResponse.<UserResponse>builder()
+                .data(response)
+                .message("User retrieved successfully")
+                .timestamp(LocalDateTime.now())
+                .build());
     }
 
     @GetMapping
-    public ResponseEntity<?> getAll(
-            @RequestHeader(name = "Authorization") String accessToken,
-            @PageableDefault(page = 0,size = 10,sort = "id",direction = Sort.Direction.ASC) Pageable page,
-            @ModelAttribute RegisterUserRequest registerUserRequest
-    ){
-        Claims jwtPayload = jwtUtils.decodeAccessToken(accessToken);
-        Date currentDate = new Date();
-        String getToken = jwtPayload.getSubject();
-        String getAdmin = adminService.getById(getToken).getId();
-        boolean isAdminIdJWTEqualsAdminIdReqParams = jwtPayload.getSubject().equals(getAdmin);
-        boolean isTokenNotYetExpired = currentDate.before(jwtPayload.getExpiration());
-
-        if (isAdminIdJWTEqualsAdminIdReqParams && isTokenNotYetExpired){
-            PageResponse<User> res = new PageResponse<>(userService.getAll(page,registerUserRequest));
-            return Res.renderJson(res,"ok",HttpStatus.OK);
-        }
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access Denied");
+    @Operation(summary = "Get all users", description = "Retrieve all users with pagination and filtering")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<WebResponse<PageResponse<User>>> getAllUsers(
+            @Parameter(description = "Pagination and sorting") 
+            @PageableDefault(page = 0, size = 10, sort = "id", direction = Sort.Direction.ASC) Pageable page,
+            @Parameter(description = "Search criteria") @ModelAttribute RegisterUserRequest searchCriteria) {
+        
+        log.info("Fetching users with page: {}, size: {}", page.getPageNumber(), page.getPageSize());
+        Page<User> userPage = userService.getAll(page, searchCriteria);
+        PageResponse<User> response = new PageResponse<>(userPage);
+        
+        return ResponseEntity.ok(WebResponse.<PageResponse<User>>builder()
+                .data(response)
+                .message("Users retrieved successfully")
+                .timestamp(LocalDateTime.now())
+                .build());
     }
 
-    @PutMapping("/update")
-    public ResponseEntity<?> update(@RequestHeader(name = "Authorization") String accessToken, @RequestBody RegisterUserRequest request) {
-        Claims jwtPayload = jwtUtils.decodeAccessToken(accessToken);
-        Date currentDate = new Date();
-        String userIdFromToken = jwtPayload.getSubject();
-        boolean isUserIdJWTequalsUserIdReqParams = userIdFromToken.equals(request.getId());
-        boolean isTokenNotYetExpired = currentDate.before(jwtPayload.getExpiration());
-
-        if (isUserIdJWTequalsUserIdReqParams && isTokenNotYetExpired) {
-            User updatedUser = userService.update(request);
-            return ResponseEntity.ok(UserResponse.fromUser(updatedUser));
-        } else {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Failed to Find");
-        }
+    @PutMapping("/{id}")
+    @Operation(summary = "Update user", description = "Update user information")
+    @PreAuthorize("hasRole('USER') and #id == authentication.principal.username or hasRole('ADMIN')")
+    public ResponseEntity<WebResponse<UserResponse>> updateUser(
+            @Parameter(description = "User ID") @PathVariable String id,
+            @Valid @RequestBody RegisterUserRequest request) {
+        
+        log.info("Updating user with ID: {}", id);
+        request.setId(id);
+        User updatedUser = userService.update(request);
+        UserResponse response = UserResponse.fromUser(updatedUser);
+        
+        return ResponseEntity.ok(WebResponse.<UserResponse>builder()
+                .data(response)
+                .message("User updated successfully")
+                .timestamp(LocalDateTime.now())
+                .build());
     }
 
-    @DeleteMapping(path = "/{id}")
-    public ResponseEntity<?> delete(@RequestHeader(name = "Authorization") String accessToken, @PathVariable String id) {
-        Claims jwtPayload = jwtUtils.decodeAccessToken(accessToken);
-        Date currentDate = new Date();
-        boolean isUserIdJWTequalsUserIdReqParams = jwtPayload.getSubject().equals(id);
-        boolean isTokenNotYetExpired = currentDate.before(jwtPayload.getExpiration());
-
-        if (isUserIdJWTequalsUserIdReqParams && isTokenNotYetExpired) {
-            try {
-                userService.delete(id);
-                return Res.renderJson(null, "User Deleted Successfully", HttpStatus.OK);
-            } catch (Exception e) {
-                return Res.renderJson(null, "Failed to Delete User", HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        } else {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Failed to Find");
-        }
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete user", description = "Delete user by ID")
+    @PreAuthorize("hasRole('USER') and #id == authentication.principal.username or hasRole('ADMIN')")
+    public ResponseEntity<WebResponse<String>> deleteUser(
+            @Parameter(description = "User ID") @PathVariable String id) {
+        
+        log.info("Deleting user with ID: {}", id);
+        userService.delete(id);
+        
+        return ResponseEntity.ok(WebResponse.<String>builder()
+                .data("User deleted successfully")
+                .message("User deleted successfully")
+                .timestamp(LocalDateTime.now())
+                .build());
     }
 }
